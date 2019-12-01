@@ -16,6 +16,7 @@ class_path='config/coco.names'
 img_size=416
 conf_thres=0.8
 nms_thres=0.4
+is_crop_img = True
 
 # load model and put into eval mode
 model = Darknet(config_path, img_size=img_size)
@@ -31,11 +32,14 @@ def detect_image(img):
     ratio = min(img_size/img.size[0], img_size/img.size[1])
     imw = round(img.size[0] * ratio)
     imh = round(img.size[1] * ratio)
-    img_transforms = transforms.Compose([ transforms.Resize((imh, imw)),
+    img_transforms = transforms.Compose([transforms.Resize((imh, imw)),
          transforms.Pad((max(int((imh-imw)/2),0), max(int((imw-imh)/2),0), max(int((imh-imw)/2),0), max(int((imw-imh)/2),0)),
                         (128,128,128)),
          transforms.ToTensor(),
          ])
+    # img_transforms = transforms.Compose([transforms.CenterCrop((img_size, img_size)),  # transforms.Resize((imh, imw)),
+    #     transforms.ToTensor(),
+    #     ])
     # convert image to Tensor
     image_tensor = img_transforms(img).float()
     image_tensor = image_tensor.unsqueeze_(0)
@@ -46,7 +50,8 @@ def detect_image(img):
         detections = utils.non_max_suppression(detections, 80, conf_thres, nms_thres)
     return detections[0]
 
-videopath = '../data/video/overpass.mp4'
+#videopath = '../data/video/overpass.mp4'
+videopath = 'D:/LectureSSD_rescue/project-related/road-weather-topes/code/yolo-object-detection/yolo-object-detection/videos/400M.avi'
 
 import cv2
 from sort import *
@@ -58,12 +63,27 @@ mot_tracker = Sort()
 cv2.namedWindow('Stream',cv2.WINDOW_NORMAL)
 cv2.resizeWindow('Stream', (800,600))
 
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
 ret,frame=vid.read()
+#compute the center points and left-top corner
+# assuming the size of a video is larger than 416 both in hor/ver length
+
+ovw = frame.shape[1] # original size
+ovh = frame.shape[0]
+nvw = int((ovw-img_size)/2)
+#nvh = int((ovh-img_size)/2)
+nvh = int(10)
+if is_crop_img: # sangkny
+    frame = frame[nvh:nvh+img_size, nvw:nvw+img_size,:]
+
 vw = frame.shape[1]
 vh = frame.shape[0]
 print ("Video size", vw,vh)
-outvideo = cv2.VideoWriter(videopath.replace(".mp4", "-det.mp4"),fourcc,20.0,(vw,vh))
+if "avi" in videopath.lower():
+    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+    outvideo = cv2.VideoWriter(videopath.replace(".avi", "-det-10h.avi"),fourcc,30,	(vw, vh), True)
+else:
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    outvideo = cv2.VideoWriter(videopath.replace(".mp4", "-det-10h.mp4"),fourcc,20.0,(vw,vh))
 
 frames = 0
 starttime = time.time()
@@ -72,6 +92,9 @@ while(True):
     if not ret:
         break
     frames += 1
+    if is_crop_img:
+        frame = frame[nvh:nvh + img_size, nvw:nvw + img_size, :]  # sangkny
+
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     pilimg = Image.fromarray(frame)
     detections = detect_image(pilimg)
